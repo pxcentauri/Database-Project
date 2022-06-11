@@ -1,2 +1,2 @@
-# comp9311
+# Database Project
 This repository includes the project of the database course
