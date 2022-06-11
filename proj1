@@ -1,0 +1,223 @@
+-- comp9311 22T1 Project 1
+--
+-- MyMyUNSW Solutions
+
+create or replace view Q1(subject_name)
+as select name 
+from subjects where _prereq like '%COMP%COMP3%'
+or _prereq like '%COMP3%COMP%';
+
+
+
+create or replace view Q2(course_id)
+as select courses.id from classes,courses,rooms,class_types,buildings
+where classes.course=courses.id and classes.room=rooms.id 
+and class_types.id=classes.ctype 
+and buildings.id=rooms.building and class_types.name='Studio'
+group by courses.id
+having count(distinct buildings.id)>2;
+
+
+
+
+create or replace view q31 as
+select courses.id,count(*) from classes  
+join courses  on classes.course=courses.id
+join rooms  on classes.room=rooms.id 
+join buildings on rooms.building=buildings.id
+where buildings.name='Central Lecture Block' and to_char(classes.enddate,'yyyy')='2008'
+group by courses.id;
+
+create or replace view Q3(course_id, use_rate)
+as select id,count from
+q31 where count=(select max(count) from q31);
+
+
+
+create or replace view Q4(facility)
+as select description from facilities where id not in
+(select facilities.id from facilities 
+join  room_facilities on facilities.id=room_facilities.facility
+join rooms on room_facilities.room=rooms.id
+join buildings on rooms.building=buildings.id
+where buildings.gridref like'C%');
+
+
+
+create or replace view Q5(unsw_id, student_name)
+as select p.unswid, p.name from People p join students on students.id=p.id join 
+(select students.id,count(*) as ct from students
+join course_enrolments on students.id=course_enrolments.student
+ where students.id not in(
+select students.id as c from students
+join course_enrolments on students.id=course_enrolments.student
+where course_enrolments.grade!='HD' and students.stype='local'
+group by students.id) and students.stype='local'
+group by students.id) as a on a.id=students.id;
+
+
+
+create or replace view Q6(subject_name, non_null_mark_count, null_mark_count)
+as
+select a.name,a.count-b.count,b.count from
+(select courses.id,subjects.name,count(*) from subjects join courses on subjects.id=courses.subject
+join semesters on semesters.id=courses.semester 
+join course_enrolments on course_enrolments.course=courses.id
+where semesters.name='Sem1 2006'
+group by courses.id,subjects.name
+having count(course_enrolments.mark)>1)as a join
+(select courses.id,subjects.name,count(*) from subjects join courses on subjects.id=courses.subject
+join semesters on semesters.id=courses.semester 
+join course_enrolments on course_enrolments.course=courses.id
+where semesters.name='Sem1 2006' and course_enrolments.mark is null
+group by courses.id,subjects.name
+having count(*)>10) as b on a.id=b.id;
+
+
+
+create or replace view Q7(school_name, stream_count)
+as select longname,count(*)  from Streams join OrgUnits  on Streams.offeredBy= OrgUnits.id
+join OrgUnit_types on OrgUnit_types.id=OrgUnits.utype where OrgUnit_types.name='School'
+group by OrgUnits.id,OrgUnits.longname having count(*) >(select count(*) from Streams  join OrgUnits on Streams.offeredBy= OrgUnits.id
+where OrgUnits.longname='School of Computer Science and Engineering')
+order by count DESC;
+
+
+
+
+create or replace view locals as
+select students.id,people.name,course_enrolments.mark from subjects 
+join courses on subjects.id=courses.subject
+join course_enrolments on course_enrolments.course=courses.id
+join semesters on semesters.id=courses.semester 
+join students on students.id=course_enrolments.student
+join people on people.id=students.id
+where subjects.name='Engineering Design' and course_enrolments.mark>98 and students.stype='local' and semesters.name='Sem1 2012';
+
+create or replace view intls as
+select students.id,people.name,course_enrolments.mark from subjects 
+join courses on subjects.id=courses.subject
+join course_enrolments on course_enrolments.course=courses.id
+join semesters on semesters.id=courses.semester 
+join students on students.id=course_enrolments.student
+join people on people.id=students.id
+where subjects.name='Engineering Design' and course_enrolments.mark>98 and students.stype='intl' and semesters.name='Sem1 2012';
+
+create or replace view Q8(student_name_local, student_name_intl)
+as select locals.name,intls.name from locals,intls
+where locals.mark=intls.mark;
+
+
+
+
+
+
+
+
+
+create or replace view Q9(ranking, course_id, subject_name, student_diversity_score)
+as
+select ranking,id,name,count from
+(select id,name,count,Rank() over(order by count DESC) as ranking from (
+select courses.id,subjects.name,count(distinct people.origin) as count
+from subjects join courses on subjects.id=courses.subject 
+join course_enrolments on course_enrolments.course=courses.id
+join students on students.id=course_enrolments.student
+join people  on people.id=students.id
+group by courses.id,subjects.name
+order by count DESC
+) as a) as b
+where b.ranking <=6;
+
+
+
+
+create or replace view Q10(subject_code, avg_mark)
+as
+select subjects.code,cast(sum(mark)*1.0/count(*) as numeric(4,2)) as avg
+from subjects  join courses on subjects.id=courses.subject
+join semesters on semesters.id=courses.semester 
+join course_enrolments  on courses.id=course_enrolments.course
+join OrgUnits on subjects.offeredby=OrgUnits.id
+where semesters.name='Sem1 2010'  and subjects.career='PG' and OrgUnits.longname='School of Computer Science and Engineering'
+group by subjects.id 
+having count(*)>10
+order by avg DESC;
+
+
+create or replace view sem1_avg as
+select subjects.id,subjects.code,avg(mark)
+from subjects join courses on subjects.id=courses.subject
+join semesters on semesters.id=courses.semester 
+join course_enrolments on courses.id=course_enrolments.course
+join OrgUnits on subjects.offeredby=OrgUnits.id
+where (OrgUnits.longname='School of Chemistry' or OrgUnits.longname='School of Accounting') and semesters.name='Sem1 2008'
+group by subjects.id,subjects.name;
+
+create or replace view sem2_avg as
+select subjects.id,subjects.code,avg(mark)
+from subjects join courses on subjects.id=courses.subject
+join semesters on semesters.id=courses.semester 
+join course_enrolments on courses.id=course_enrolments.course
+join OrgUnits on subjects.offeredby=OrgUnits.id
+where (OrgUnits.longname='School of Chemistry' or OrgUnits.longname='School of Accounting') and semesters.name='Sem2 2008'
+group by subjects.id,subjects.name;
+
+create or replace view all_avg as
+select sem1_avg.code,round((sem2_avg.avg-sem1_avg.avg)/sem1_avg.avg,4) as avg
+from sem1_avg join sem2_avg on sem1_avg.id=sem2_avg.id
+where sem1_avg.avg is not null and sem2_avg.avg is not null;
+
+
+create or replace view Q11(subject_code, inc_rate)
+as
+select code,avg from all_avg where avg>=all(select avg from all_avg);
+
+
+
+
+
+
+create or replace view Q12(name, subject_code, year, term, lab_time_per_week)
+as
+select a.name,code,year,term,sum(time)
+from (
+select people.name,people.id,subjects.code,semesters.year,semesters.term,classes.course,classes.endtime-classes.starttime as time
+from subjects join courses on subjects.id=courses.subject
+join Course_staff on Course_staff.course=courses.id
+join Staff on Staff.id=Course_staff.staff
+join Staff_roles on Course_staff.role=Staff_roles.id
+join people on Staff.id=people.id
+join semesters on semesters.id=courses.semester 
+join classes on classes.course=courses.id
+join class_types on class_types.id= classes.ctype
+where class_types.unswid='LAB' and subjects.code like 'COMP%' and Staff_roles.name like '%Lecturer%' and people.title='Dr'
+)as a
+group by id,a.name,code,course,year,term;
+
+
+
+
+
+
+
+
+
+create or replace view info13 as
+select su.code,se.id,count(mark),sum(case when mark<50 then 1 else 0 end) from subjects su join courses co on su.id=co.subject
+join semesters se on se.id=co.semester 
+join course_enrolments ce on co.id=ce.course
+join students s on ce.student=s.id
+where su.code like 'COMP%'
+group by su.id,se.id,su.code
+having count(*)>150;
+
+create or replace view Q13(subject_code, year, term, fail_rate)
+as 
+select in1.code,semesters.year,semesters.term,round(sum*1.0/count,4) from
+info13 in1 join semesters on in1.id=semesters.id
+where count >= all(
+    select count from info13 in2 where in1.code=in2.code
+);
+
+
